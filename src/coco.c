@@ -8,10 +8,6 @@
 #include "box.h"
 #include "demo.h"
 
-#ifdef OPENCV
-#include <opencv2/highgui/highgui_c.h>
-#endif
-
 char *coco_classes[] = {"person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"};
 
 int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
@@ -164,9 +160,9 @@ void validate_coco(char *cfgfile, char *weightfile)
     FILE *fp = fopen(buff, "w");
     fprintf(fp, "[\n");
 
-    box* boxes = (box*)calloc(side * side * l.n, sizeof(box));
-    float** probs = (float**)calloc(side * side * l.n, sizeof(float*));
-    for(j = 0; j < side*side*l.n; ++j) probs[j] = (float*)calloc(classes, sizeof(float));
+    box* boxes = (box*)xcalloc(side * side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(side * side * l.n, sizeof(float*));
+    for(j = 0; j < side*side*l.n; ++j) probs[j] = (float*)xcalloc(classes, sizeof(float));
 
     int m = plist->size;
     int i=0;
@@ -177,11 +173,11 @@ void validate_coco(char *cfgfile, char *weightfile)
     float iou_thresh = .5;
 
     int nthreads = 8;
-    image* val = (image*)calloc(nthreads, sizeof(image));
-    image* val_resized = (image*)calloc(nthreads, sizeof(image));
-    image* buf = (image*)calloc(nthreads, sizeof(image));
-    image* buf_resized = (image*)calloc(nthreads, sizeof(image));
-    pthread_t* thr = (pthread_t*)calloc(nthreads, sizeof(pthread_t));
+    image* val = (image*)xcalloc(nthreads, sizeof(image));
+    image* val_resized = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf_resized = (image*)xcalloc(nthreads, sizeof(image));
+    pthread_t* thr = (pthread_t*)xcalloc(nthreads, sizeof(pthread_t));
 
     load_args args = {0};
     args.w = net.w;
@@ -222,9 +218,19 @@ void validate_coco(char *cfgfile, char *weightfile)
             free_image(val_resized[t]);
         }
     }
+#ifdef WIN32
+    fseek(fp, -3, SEEK_CUR);
+#else
     fseek(fp, -2, SEEK_CUR);
+#endif
     fprintf(fp, "\n]\n");
     fclose(fp);
+
+    if (val) free(val);
+    if (val_resized) free(val_resized);
+    if (buf) free(buf);
+    if (buf_resized) free(buf_resized);
+    if (thr) free(thr);
 
     fprintf(stderr, "Total Detection Time: %f Seconds\n", (double)(time(0) - start));
 }
@@ -248,15 +254,19 @@ void validate_coco_recall(char *cfgfile, char *weightfile)
     int side = l.side;
 
     int j, k;
-    FILE** fps = (FILE**)calloc(classes, sizeof(FILE*));
+    /* unused code,why?
+    FILE** fps = (FILE**)xcalloc(classes, sizeof(FILE*));
     for(j = 0; j < classes; ++j){
         char buff[1024];
         snprintf(buff, 1024, "%s%s.txt", base, coco_classes[j]);
         fps[j] = fopen(buff, "w");
     }
-    box* boxes = (box*)calloc(side * side * l.n, sizeof(box));
-    float** probs = (float**)calloc(side * side * l.n, sizeof(float*));
-    for(j = 0; j < side*side*l.n; ++j) probs[j] = (float*)calloc(classes, sizeof(float));
+    */
+    box* boxes = (box*)xcalloc(side * side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(side * side * l.n, sizeof(float*));
+    for(j = 0; j < side*side*l.n; ++j) {
+      probs[j] = (float*)xcalloc(classes, sizeof(float));
+    }
 
     int m = plist->size;
     int i=0;
@@ -307,10 +317,17 @@ void validate_coco_recall(char *cfgfile, char *weightfile)
         }
 
         fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals/(i+1), avg_iou*100/total, 100.*correct/total);
-        free(id);
+
+        //if (fps) free(fps);
+        if (id) free(id);
         free_image(orig);
         free_image(sized);
     }
+    free(boxes);
+    for(j = 0; j < side*side*l.n; ++j) {
+        free(probs[j]);
+    }
+    free(probs);
 }
 
 void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
@@ -328,9 +345,11 @@ void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
     char buff[256];
     char *input = buff;
     int j;
-    box* boxes = (box*)calloc(l.side * l.side * l.n, sizeof(box));
-    float** probs = (float**)calloc(l.side * l.side * l.n, sizeof(float*));
-    for(j = 0; j < l.side*l.side*l.n; ++j) probs[j] = (float*)calloc(l.classes, sizeof(float));
+    box* boxes = (box*)xcalloc(l.side * l.side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(l.side * l.side * l.n, sizeof(float*));
+    for(j = 0; j < l.side*l.side*l.n; ++j) {
+      probs[j] = (float*)xcalloc(l.classes, sizeof(float));
+    }
     while(1){
         if(filename){
             strncpy(input, filename, 256);
@@ -338,7 +357,7 @@ void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
             printf("Enter Image Path: ");
             fflush(stdout);
             input = fgets(input, 256, stdin);
-            if(!input) return;
+            if(!input) break;
             strtok(input, "\n");
         }
         image im = load_image_color(input,0,0);
@@ -354,12 +373,17 @@ void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
         show_image(im, "predictions");
         free_image(im);
         free_image(sized);
-#ifdef OPENCV
-        cvWaitKey(0);
-        cvDestroyAllWindows();
-#endif
+
+        wait_until_press_key_cv();
+        destroy_all_windows_cv();
+
         if (filename) break;
     }
+    free(boxes);
+    for(j = 0; j < l.side*l.side*l.n; ++j) {
+        free(probs[j]);
+    }
+    free(probs);
 }
 
 void run_coco(int argc, char **argv)
@@ -388,5 +412,5 @@ void run_coco(int argc, char **argv)
     else if(0==strcmp(argv[2], "valid")) validate_coco(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_coco_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index, filename, coco_classes, 80, frame_skip,
-		prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output);
+		prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
 }

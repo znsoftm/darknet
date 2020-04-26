@@ -6,15 +6,6 @@
 #include "box.h"
 #include "demo.h"
 
-#ifdef OPENCV
-#include <opencv2/highgui/highgui_c.h>
-#include <opencv2/imgproc/imgproc_c.h>
-#include <opencv2/core/version.hpp>
-#ifndef CV_VERSION_EPOCH
-#include <opencv2/videoio/videoio_c.h>
-#endif
-#endif
-
 char *voc_names[] = {"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"};
 
 void train_yolo(char *cfgfile, char *weightfile)
@@ -133,15 +124,15 @@ void validate_yolo(char *cfgfile, char *weightfile)
     int classes = l.classes;
 
     int j;
-    FILE** fps = (FILE**)calloc(classes, sizeof(FILE*));
+    FILE** fps = (FILE**)xcalloc(classes, sizeof(FILE*));
     for(j = 0; j < classes; ++j){
         char buff[1024];
         snprintf(buff, 1024, "%s%s.txt", base, voc_names[j]);
         fps[j] = fopen(buff, "w");
     }
-    box* boxes = (box*)calloc(l.side * l.side * l.n, sizeof(box));
-    float** probs = (float**)calloc(l.side * l.side * l.n, sizeof(float*));
-    for(j = 0; j < l.side*l.side*l.n; ++j) probs[j] = (float*)calloc(classes, sizeof(float));
+    box* boxes = (box*)xcalloc(l.side * l.side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(l.side * l.side * l.n, sizeof(float*));
+    for(j = 0; j < l.side*l.side*l.n; ++j) probs[j] = (float*)xcalloc(classes, sizeof(float));
 
     int m = plist->size;
     int i=0;
@@ -152,11 +143,11 @@ void validate_yolo(char *cfgfile, char *weightfile)
     float iou_thresh = .5;
 
     int nthreads = 8;
-    image* val = (image*)calloc(nthreads, sizeof(image));
-    image* val_resized = (image*)calloc(nthreads, sizeof(image));
-    image* buf = (image*)calloc(nthreads, sizeof(image));
-    image* buf_resized = (image*)calloc(nthreads, sizeof(image));
-    pthread_t* thr = (pthread_t*)calloc(nthreads, sizeof(pthread_t));
+    image* val = (image*)xcalloc(nthreads, sizeof(image));
+    image* val_resized = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf_resized = (image*)xcalloc(nthreads, sizeof(image));
+    pthread_t* thr = (pthread_t*)xcalloc(nthreads, sizeof(pthread_t));
 
     load_args args = {0};
     args.w = net.w;
@@ -198,7 +189,19 @@ void validate_yolo(char *cfgfile, char *weightfile)
             free_image(val_resized[t]);
         }
     }
+
+    if (fps) free(fps);
+    if (val) free(val);
+    if (val_resized) free(val_resized);
+    if (buf) free(buf);
+    if (buf_resized) free(buf_resized);
+    if (thr) free(thr);
+
     fprintf(stderr, "Total Detection Time: %f Seconds\n", (double)(time(0) - start));
+    for(j = 0; j < classes; ++j){
+        fclose(fps[j]);
+    }
+    free(fps);
 }
 
 void validate_yolo_recall(char *cfgfile, char *weightfile)
@@ -211,7 +214,6 @@ void validate_yolo_recall(char *cfgfile, char *weightfile)
     fprintf(stderr, "Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
     srand(time(0));
 
-    char *base = "results/comp4_det_test_";
     list *plist = get_paths("data/voc.2007.test");
     char **paths = (char **)list_to_array(plist);
 
@@ -220,15 +222,11 @@ void validate_yolo_recall(char *cfgfile, char *weightfile)
     int side = l.side;
 
     int j, k;
-    FILE** fps = (FILE**)calloc(classes, sizeof(FILE*));
-    for(j = 0; j < classes; ++j){
-        char buff[1024];
-        snprintf(buff, 1024, "%s%s.txt", base, voc_names[j]);
-        fps[j] = fopen(buff, "w");
+    box* boxes = (box*)xcalloc(side * side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(side * side * l.n, sizeof(float*));
+    for(j = 0; j < side*side*l.n; ++j) {
+        probs[j] = (float*)xcalloc(classes, sizeof(float));
     }
-    box* boxes = (box*)calloc(side * side * l.n, sizeof(box));
-    float** probs = (float**)calloc(side * side * l.n, sizeof(float*));
-    for(j = 0; j < side*side*l.n; ++j) probs[j] = (float*)calloc(classes, sizeof(float));
 
     int m = plist->size;
     int i=0;
@@ -294,14 +292,15 @@ void test_yolo(char *cfgfile, char *weightfile, char *filename, float thresh)
     detection_layer l = net.layers[net.n-1];
     set_batch_network(&net, 1);
     srand(2222222);
-    clock_t time;
     char buff[256];
     char *input = buff;
     int j;
     float nms=.4;
-    box* boxes = (box*)calloc(l.side * l.side * l.n, sizeof(box));
-    float** probs = (float**)calloc(l.side * l.side * l.n, sizeof(float*));
-    for(j = 0; j < l.side*l.side*l.n; ++j) probs[j] = (float*)calloc(l.classes, sizeof(float));
+    box* boxes = (box*)xcalloc(l.side * l.side * l.n, sizeof(box));
+    float** probs = (float**)xcalloc(l.side * l.side * l.n, sizeof(float*));
+    for(j = 0; j < l.side*l.side*l.n; ++j) {
+        probs[j] = (float*)xcalloc(l.classes, sizeof(float));
+    }
     while(1){
         if(filename){
             strncpy(input, filename, 256);
@@ -315,7 +314,7 @@ void test_yolo(char *cfgfile, char *weightfile, char *filename, float thresh)
         image im = load_image_color(input,0,0);
         image sized = resize_image(im, net.w, net.h);
         float *X = sized.data;
-        time=clock();
+        clock_t time=clock();
         network_predict(net, X);
         printf("%s: Predicted in %f seconds.\n", input, sec(clock()-time));
         get_detection_boxes(l, 1, 1, thresh, probs, boxes, 0);
@@ -327,12 +326,17 @@ void test_yolo(char *cfgfile, char *weightfile, char *filename, float thresh)
 
         free_image(im);
         free_image(sized);
-#ifdef OPENCV
-        cvWaitKey(0);
-        cvDestroyAllWindows();
-#endif
+
+        wait_until_press_key_cv();
+        destroy_all_windows_cv();
+
         if (filename) break;
     }
+    free(boxes);
+    for(j = 0; j < l.side*l.side*l.n; ++j) {
+        free(probs[j]);
+    }
+    free(probs);
 }
 
 void run_yolo(int argc, char **argv)
@@ -360,5 +364,5 @@ void run_yolo(int argc, char **argv)
     else if(0==strcmp(argv[2], "valid")) validate_yolo(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_yolo_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index, filename, voc_names, 20, frame_skip,
-		prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output);
+		prefix, out_filename, mjpeg_port, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
 }

@@ -49,7 +49,7 @@ void gemm_bin(int M, int N, int K, float ALPHA,
 float *random_matrix(int rows, int cols)
 {
     int i;
-    float* m = (float*)calloc(rows * cols, sizeof(float));
+    float* m = (float*)xcalloc(rows * cols, sizeof(float));
     for(i = 0; i < rows*cols; ++i){
         m[i] = (float)rand()/RAND_MAX;
     }
@@ -154,7 +154,7 @@ void gemm_nn_custom_bin_mean(int M, int N, int K, float ALPHA_UNUSED,
     unsigned char *B, int ldb,
     float *C, int ldc, float *mean_arr)
 {
-    int *count_arr = calloc(M*N, sizeof(int));
+    int *count_arr = xcalloc(M*N, sizeof(int));
 
     int i, j, k;
     for (i = 0; i < M; ++i) {   // l.n - filters [16 - 55 - 1024]
@@ -184,7 +184,7 @@ void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
     unsigned char *B, int ldb,
     float *C, int ldc, float *mean_arr)
 {
-    int *count_arr = calloc(M*N, sizeof(int));
+    int *count_arr = xcalloc(M*N, sizeof(int));
 
     int i, j, k;
     for (i = 0; i < M; ++i) {   // l.n - filters [16 - 55 - 1024]
@@ -213,7 +213,7 @@ void gemm_nn_custom_bin_mean(int M, int N, int K, float ALPHA_UNUSED,
     unsigned char *B, int ldb,
     float *C, int ldc, float *mean_arr)
 {
-    int *count_arr = calloc(M*N, sizeof(int));
+    int *count_arr = xcalloc(M*N, sizeof(int));
 
     int i;
 
@@ -319,15 +319,17 @@ void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
 //----------------------------
 
 // is not used
+/*
 void transpose_32x32_bits_my(uint32_t *A, uint32_t *B, int lda, int ldb)
 {
     unsigned int x, y;
     for (y = 0; y < 32; ++y) {
         for (x = 0; x < 32; ++x) {
-            if (A[y * lda] & (1 << x)) B[x * ldb] |= (uint32_t)1 << y;
+            if (A[y * lda] & ((uint32_t)1 << x)) B[x * ldb] |= (uint32_t)1 << y;
         }
     }
 }
+*/
 
 #ifndef GPU
 uint8_t reverse_8_bit(uint8_t a) {
@@ -512,7 +514,7 @@ static inline int popcnt_32(uint32_t val32) {
 //----------------------------
 
 
-#if (defined(__AVX__) && defined(__x86_64__)) || defined(_WIN64)
+#if (defined(__AVX__) && defined(__x86_64__)) || (defined(_WIN64) && !defined(__MINGW32__))
 
 #ifdef _WIN64
 #include <intrin.h>
@@ -550,7 +552,26 @@ static inline float _castu32_f32(uint32_t a) {
 }
 
 static inline float _mm256_extract_float32(__m256 a, const int index) {
-    return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), index));
+    switch(index) {
+    case 0:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 0));
+    case 1:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 1));
+    case 2:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 2));
+    case 3:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 3));
+    case 4:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 4));
+    case 5:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 5));
+    case 6:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 6));
+    case 7:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 7));
+    default:
+      return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), 0));
+    }
 }
 
 void asm_cpuid(uint32_t* abcd, uint32_t eax)
@@ -617,48 +638,48 @@ void check_cpu_features(void) {
     //  Detect Features
     if (nIds >= 0x00000001) {
         cpuid(info, 0x00000001);
-        HW_MMX = (info[3] & ((int)1 << 23)) != 0;
-        HW_SSE = (info[3] & ((int)1 << 25)) != 0;
-        HW_SSE2 = (info[3] & ((int)1 << 26)) != 0;
-        HW_SSE3 = (info[2] & ((int)1 << 0)) != 0;
+        HW_MMX = (info[3] & ((uint32_t)1 << 23)) != 0;
+        HW_SSE = (info[3] & ((uint32_t)1 << 25)) != 0;
+        HW_SSE2 = (info[3] & ((uint32_t)1 << 26)) != 0;
+        HW_SSE3 = (info[2] & ((uint32_t)1 << 0)) != 0;
 
-        HW_SSSE3 = (info[2] & ((int)1 << 9)) != 0;
-        HW_SSE41 = (info[2] & ((int)1 << 19)) != 0;
-        HW_SSE42 = (info[2] & ((int)1 << 20)) != 0;
-        HW_AES = (info[2] & ((int)1 << 25)) != 0;
+        HW_SSSE3 = (info[2] & ((uint32_t)1 << 9)) != 0;
+        HW_SSE41 = (info[2] & ((uint32_t)1 << 19)) != 0;
+        HW_SSE42 = (info[2] & ((uint32_t)1 << 20)) != 0;
+        HW_AES = (info[2] & ((uint32_t)1 << 25)) != 0;
 
-        HW_AVX = (info[2] & ((int)1 << 28)) != 0;
-        HW_FMA3 = (info[2] & ((int)1 << 12)) != 0;
+        HW_AVX = (info[2] & ((uint32_t)1 << 28)) != 0;
+        HW_FMA3 = (info[2] & ((uint32_t)1 << 12)) != 0;
 
-        HW_RDRAND = (info[2] & ((int)1 << 30)) != 0;
+        HW_RDRAND = (info[2] & ((uint32_t)1 << 30)) != 0;
     }
     if (nIds >= 0x00000007) {
         cpuid(info, 0x00000007);
-        HW_AVX2 = (info[1] & ((int)1 << 5)) != 0;
+        HW_AVX2 = (info[1] & ((uint32_t)1 << 5)) != 0;
 
-        HW_BMI1 = (info[1] & ((int)1 << 3)) != 0;
-        HW_BMI2 = (info[1] & ((int)1 << 8)) != 0;
-        HW_ADX = (info[1] & ((int)1 << 19)) != 0;
-        HW_SHA = (info[1] & ((int)1 << 29)) != 0;
-        HW_PREFETCHWT1 = (info[2] & ((int)1 << 0)) != 0;
+        HW_BMI1 = (info[1] & ((uint32_t)1 << 3)) != 0;
+        HW_BMI2 = (info[1] & ((uint32_t)1 << 8)) != 0;
+        HW_ADX = (info[1] & ((uint32_t)1 << 19)) != 0;
+        HW_SHA = (info[1] & ((uint32_t)1 << 29)) != 0;
+        HW_PREFETCHWT1 = (info[2] & ((uint32_t)1 << 0)) != 0;
 
-        HW_AVX512F = (info[1] & ((int)1 << 16)) != 0;
-        HW_AVX512CD = (info[1] & ((int)1 << 28)) != 0;
-        HW_AVX512PF = (info[1] & ((int)1 << 26)) != 0;
-        HW_AVX512ER = (info[1] & ((int)1 << 27)) != 0;
-        HW_AVX512VL = (info[1] & ((int)1 << 31)) != 0;
-        HW_AVX512BW = (info[1] & ((int)1 << 30)) != 0;
-        HW_AVX512DQ = (info[1] & ((int)1 << 17)) != 0;
-        HW_AVX512IFMA = (info[1] & ((int)1 << 21)) != 0;
-        HW_AVX512VBMI = (info[2] & ((int)1 << 1)) != 0;
+        HW_AVX512F = (info[1] & ((uint32_t)1 << 16)) != 0;
+        HW_AVX512CD = (info[1] & ((uint32_t)1 << 28)) != 0;
+        HW_AVX512PF = (info[1] & ((uint32_t)1 << 26)) != 0;
+        HW_AVX512ER = (info[1] & ((uint32_t)1 << 27)) != 0;
+        HW_AVX512VL = (info[1] & ((uint32_t)1 << 31)) != 0;
+        HW_AVX512BW = (info[1] & ((uint32_t)1 << 30)) != 0;
+        HW_AVX512DQ = (info[1] & ((uint32_t)1 << 17)) != 0;
+        HW_AVX512IFMA = (info[1] & ((uint32_t)1 << 21)) != 0;
+        HW_AVX512VBMI = (info[2] & ((uint32_t)1 << 1)) != 0;
     }
     if (nExIds >= 0x80000001) {
         cpuid(info, 0x80000001);
-        HW_x64 = (info[3] & ((int)1 << 29)) != 0;
-        HW_ABM = (info[2] & ((int)1 << 5)) != 0;
-        HW_SSE4a = (info[2] & ((int)1 << 6)) != 0;
-        HW_FMA4 = (info[2] & ((int)1 << 16)) != 0;
-        HW_XOP = (info[2] & ((int)1 << 11)) != 0;
+        HW_x64 = (info[3] & ((uint32_t)1 << 29)) != 0;
+        HW_ABM = (info[2] & ((uint32_t)1 << 5)) != 0;
+        HW_SSE4a = (info[2] & ((uint32_t)1 << 6)) != 0;
+        HW_FMA4 = (info[2] & ((uint32_t)1 << 16)) != 0;
+        HW_XOP = (info[2] & ((uint32_t)1 << 11)) != 0;
     }
 }
 
@@ -900,7 +921,7 @@ void gemm_nn_bin_32bit_packed(int M, int N, int K, float ALPHA,
             {
                 __m256i b256 = *((__m256i*)&B[s*ldb + j]);
                 __m256i xor256 = _mm256_xor_si256(a256, b256);  // xnor = xor(a,b)
-                __m256i all_1 = _mm256_set1_epi8(255);
+                __m256i all_1 = _mm256_set1_epi8((char)255);
                 __m256i xnor256 = _mm256_andnot_si256(xor256, all_1); // xnor = not(xor(a,b))
 
                 // waiting for - CPUID Flags: AVX512VPOPCNTDQ: __m512i _mm512_popcnt_epi32(__m512i a)
@@ -1120,8 +1141,10 @@ void convolution_2d(int w, int h, int ksize, int n, int c, int pad, int stride,
 
 static inline int popcnt128(__m128i n) {
     const __m128i n_hi = _mm_unpackhi_epi64(n, n);
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
     return __popcnt64(_mm_cvtsi128_si64(n)) + __popcnt64(_mm_cvtsi128_si64(n_hi));
+#elif defined(__APPLE__) && defined(__clang__)
+    return _mm_popcnt_u64(_mm_cvtsi128_si64(n)) + _mm_popcnt_u64(_mm_cvtsi128_si64(n_hi));
 #else
     return __popcntq(_mm_cvtsi128_si64(n)) + __popcntq(_mm_cvtsi128_si64(n_hi));
 #endif
@@ -1162,7 +1185,7 @@ static inline int popcnt256_custom(__m256i n) {
 }
 
 static inline void xnor_avx2_popcnt(__m256i a_bit256, __m256i b_bit256, __m256i *count_sum) {
-    __m256i c_bit256 = _mm256_set1_epi8(255);
+    __m256i c_bit256 = _mm256_set1_epi8((char)255);
 
     __m256i xor256 = _mm256_xor_si256(a_bit256, b_bit256);  // xnor = not(xor(a,b))
     c_bit256 = _mm256_andnot_si256(xor256, c_bit256);  // can be optimized - we can do other NOT for wegihts once and do not do this NOT
@@ -1928,7 +1951,7 @@ void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, i
                         }
                     }
                     dst[out_index] = max;
-                    indexes[out_index] = max_i;
+                    if (indexes) indexes[out_index] = max_i;
                 }
             }
         }
@@ -2347,7 +2370,7 @@ void float_to_bit(float *src, unsigned char *dst, size_t size)
     memset(dst, 0, dst_size);
 
     size_t i;
-    char* byte_arr = (char*)calloc(size, sizeof(char));
+    char* byte_arr = (char*)xcalloc(size, sizeof(char));
     for (i = 0; i < size; ++i) {
         if (src[i] > 0) byte_arr[i] = 1;
     }
@@ -2431,7 +2454,7 @@ void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, i
                         }
                     }
                     dst[out_index] = max;
-                    indexes[out_index] = max_i;
+                    if (indexes) indexes[out_index] = max_i;
                 }
             }
         }
@@ -2834,3 +2857,10 @@ int test_gpu_blas()
     return 0;
 }
 #endif
+
+
+
+void init_cpu() {
+    is_avx();
+    is_fma_avx2();
+}
